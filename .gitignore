@@ -1,0 +1,6 @@
+# Reduce the noise from the development environment and builds
+x64/
+Win32/
+.vs/
+*.vcxproj.user
+*.vcxproj.filters
