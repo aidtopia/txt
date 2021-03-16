@@ -103,3 +103,5 @@ This is a fluid list of specific episode topics that I'm considering.
 - glyphs and grapheme clusters
 - Unicode scripts
 - font linking
+- Visual Studio debugging visualizers for text
+- Cords
