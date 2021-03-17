@@ -105,3 +105,6 @@ This is a fluid list of specific episode topics that I'm considering.
 - font linking
 - Visual Studio debugging visualizers for text
 - Cords
+- Windows debug output window
+- `std::endl`
+- C++ `std::ostream`
