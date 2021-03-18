@@ -1,102 +1,83 @@
-#define NOMINMAX
-#include <atlbase.h>
-#include <atlwin.h>
-#include <Windows.h>
+#include "enablevirtualterminal.h"
 
-// Enable visual styles.
-#pragma comment(linker,"\"/manifestdependency:type='win32' \
-name='Microsoft.Windows.Common-Controls' version='6.0.0.0' \
-processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
+#include <iostream>
+#include <string_view>
 
-class DiagramWnd : public ATL::CWindowImpl<DiagramWnd> {
-    public:
-        DECLARE_WND_CLASS(L"Aidtopia Boxes Diagram Window");
-    BEGIN_MSG_MAP(DiagramWnd)
-        MESSAGE_HANDLER(WM_CREATE, OnCreate)
-        MESSAGE_HANDLER(WM_DESTROY, OnDestroy)
-        MESSAGE_HANDLER(WM_PAINT, OnPaint)
-    END_MSG_MAP()
+struct GridGlyphs {
+    // The glyphs are a 5x5 array that hold the characters necessary to
+    // draw each part of a box or table.
+    //
+    //          left    rowhdr      col     colsep      right
+    // top
+    // colhdr
+    // row
+    // rowsep
+    // bottom
+    static constexpr int top    = 0;
+    static constexpr int colhdr = 5;
+    static constexpr int row    = 10;
+    static constexpr int rowsep = 15;
+    static constexpr int bottom = 20;
+    static constexpr int left   = 0;
+    static constexpr int rowhdr = 1;
+    static constexpr int col    = 2;
+    static constexpr int colsep = 3;
+    static constexpr int right  = 4;
 
-    private:
-        LRESULT OnCreate(UINT, WPARAM, LPARAM, BOOL &) {
-            NONCLIENTMETRICSW metrics = { sizeof(metrics) };
-            ::SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, metrics.cbSize, &metrics, 0);
-            LOGFONTW lf = metrics.lfMenuFont;
-            lf.lfHeight *= 2;
-            m_hfont = ::CreateFontIndirectW(&lf);
-            return 0;
-        }
-
-        LRESULT OnDestroy(UINT, WPARAM, LPARAM, BOOL &) {
-            ::DeleteObject(m_hfont);
-            m_hfont = static_cast<HFONT>(::GetStockObject(SYSTEM_FONT));
-            return 0;
-        }
-
-        LRESULT OnPaint(UINT, WPARAM, LPARAM, BOOL &) {
-            PAINTSTRUCT ps;
-            BeginPaint(&ps);
-            RECT rc;
-            GetClientRect(&rc);
-            const auto hfontOld = ::SelectObject(ps.hdc, m_hfont);
-            ::DrawTextW(ps.hdc, L"Boxes Go Here", -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-            ::SelectObject(ps.hdc, hfontOld);
-            EndPaint(&ps);
-            return 0;
-        }
-
-        HFONT m_hfont = NULL;
-};
-
-class BoxesWnd : public ATL::CWindowImpl<BoxesWnd, ATL::CWindow, ATL::CFrameWinTraits> {
-    public:
-        DECLARE_WND_CLASS(L"Aidtopia Boxes Window");
-    BEGIN_MSG_MAP(BoxesWnd)
-        MESSAGE_HANDLER(WM_CREATE, OnCreate)
-        MESSAGE_HANDLER(WM_DESTROY, OnDestroy)
-        MESSAGE_HANDLER(WM_ERASEBKGND, OnEraseBkgnd)
-        MESSAGE_HANDLER(WM_SIZE, OnSize)
-    END_MSG_MAP()
-
-    private:
-        LRESULT OnCreate(UINT, WPARAM, LPARAM, BOOL &) {
-            m_wndDiagram.Create(m_hWnd, 0, L"Diagram", WS_CHILD | WS_VISIBLE);
-            return 0;
-        }
-
-        LRESULT OnDestroy(UINT, WPARAM, LPARAM, BOOL &) {
-            ::PostQuitMessage(0);
-            return 0;
-        }
-
-        LRESULT OnEraseBkgnd(UINT, WPARAM, LPARAM, BOOL &) {
-            // Since our children cover, we don't actually need to erase, so
-            // we lie and say we have erased to avoid flicker.
-            return TRUE;
-        }
-
-        LRESULT OnSize(UINT, WPARAM, LPARAM, BOOL &) {
-            RECT rc;
-            GetClientRect(&rc);
-            m_wndDiagram.SetWindowPos(NULL, &rc, SWP_NOZORDER);
-            return 0;
-        }
-
-        DiagramWnd m_wndDiagram;
-};
-
-int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int nCmdShow) {
-    ::HeapSetInformation(NULL, HeapEnableTerminationOnCorruption, NULL, 0);
-
-    BoxesWnd wnd;
-    wnd.Create(NULL, 0, L"Boxes");
-    wnd.ShowWindow(nCmdShow);
-    wnd.UpdateWindow();
-    MSG msg = {0};
-    while (::GetMessage(&msg, NULL, 0, 0) > 0) {
-        ::TranslateMessage(&msg);
-        ::DispatchMessageW(&msg);
+    const std::string_view &operator()(int index) const {
+        return glyphs[index];
     }
+    std::string_view glyphs[25];
+};
 
-    return (msg.message == WM_QUIT) ? static_cast<int>(msg.wParam) : EXIT_FAILURE;
+constexpr GridGlyphs ASCIIGridGlyphs = {
+    "+", "+", "-", "+", "+",
+    "+", "+", "-", "+", "+",
+    "|", "|", " ", "|", "|",
+    "|", "+", "-", "+", "|",
+    "+", "+", "-", "+", "+"
+};
+
+constexpr GridGlyphs UnicodeGridGlyphs = {
+    "\xE2\x94\x8C", "\xE2\x94\xAC", "\xE2\x94\x80", "\xE2\x94\xAC", "\xE2\x94\x90",
+    "\xE2\x94\x9C", "\xE2\x94\xBC", "\xE2\x94\x80", "\xE2\x94\xBC", "\xE2\x94\xA4",
+    "\xE2\x94\x82", "\xE2\x94\x82", " ",            "\xE2\x94\x82", "\xE2\x94\x82",
+    "\xE2\x94\x82", "\xE2\x94\xBC", "\xE2\x94\x80", "\xE2\x94\xBC", "\xE2\x94\x82",
+    "\xE2\x94\x94", "\xE2\x94\xB4", "\xE2\x94\x80", "\xE2\x94\xB4", "\xE2\x94\x98"
+};
+
+class BasicBox {
+    public:
+        explicit BasicBox(const GridGlyphs &glyphs = ASCIIGridGlyphs) : m_glyphs(glyphs) {}
+        virtual ~BasicBox() = default;
+
+        std::basic_ostream<char> &Draw(
+            std::basic_ostream<char> &out,
+            std::string_view text
+        ) const {
+            out << m_glyphs(GridGlyphs::top + GridGlyphs::left);
+            for (std::string_view::size_type i = 0; i < text.size(); ++i) {
+                out << m_glyphs(GridGlyphs::top + GridGlyphs::col);
+            }
+            out << m_glyphs(GridGlyphs::top + GridGlyphs::right) << '\n';
+            out << m_glyphs(GridGlyphs::row + GridGlyphs::left)
+                << text
+                << m_glyphs(GridGlyphs::row + GridGlyphs::right) << '\n';
+            out << m_glyphs(GridGlyphs::bottom + GridGlyphs::left);
+            for (std::string_view::size_type i = 0; i < text.size(); ++i) {
+                out << m_glyphs(GridGlyphs::bottom + GridGlyphs::col);
+            }
+            out << m_glyphs(GridGlyphs::bottom + GridGlyphs::right) << '\n';
+            return out;
+        }
+
+    private:
+        const GridGlyphs &m_glyphs;
+};
+
+int main() {
+    EnableVirtualTerminal terminal;
+    BasicBox box(UnicodeGridGlyphs);
+    box.Draw(std::cout, "Hello, World!");
+    return 0;
 }
