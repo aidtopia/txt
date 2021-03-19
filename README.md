@@ -108,3 +108,5 @@ This is a fluid list of specific episode topics that I'm considering.
 - Windows debug output window
 - `std::endl`
 - C++ `std::ostream`
+- Formatting roman numerals
+- Spelling numbers
