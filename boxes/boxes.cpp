@@ -51,25 +51,48 @@ class BasicBox {
         explicit BasicBox(const GridGlyphs &glyphs = ASCIIGridGlyphs) : m_glyphs(glyphs) {}
         virtual ~BasicBox() = default;
 
-        std::basic_ostream<char> &Draw(
+        std::basic_ostream<char> &DrawArray(
             std::basic_ostream<char> &out,
             std::string_view text
         ) const {
-            out << m_glyphs(GridGlyphs::top + GridGlyphs::left);
-            for (std::string_view::size_type i = 0; i < text.size(); ++i) {
-                out << m_glyphs(GridGlyphs::top + GridGlyphs::col);
-            }
-            out << m_glyphs(GridGlyphs::top + GridGlyphs::right) << '\n';
-            out << m_glyphs(GridGlyphs::row + GridGlyphs::left)
-                << text
-                << m_glyphs(GridGlyphs::row + GridGlyphs::right) << '\n';
-            out << m_glyphs(GridGlyphs::bottom + GridGlyphs::left);
-            for (std::string_view::size_type i = 0; i < text.size(); ++i) {
-                out << m_glyphs(GridGlyphs::bottom + GridGlyphs::col);
-            }
-            out << m_glyphs(GridGlyphs::bottom + GridGlyphs::right) << '\n';
+            DrawSegmentedSpan(out, GridGlyphs::top, text.size());
+            DrawSegmentedSpan(out, text);
+            DrawSegmentedSpan(out, GridGlyphs::bottom, text.size());
             return out;
         }
+
+        std::basic_ostream<char> &DrawSegmentedSpan(
+            std::basic_ostream<char> &out,
+            int row,
+            std::size_t length
+        ) const {
+            out << m_glyphs(row + GridGlyphs::left);
+            if (length-- > 0) {
+                out << m_glyphs(row + GridGlyphs::col);
+                while (length-- > 0) {
+                    out << m_glyphs(row + GridGlyphs::colsep)
+                        << m_glyphs(row + GridGlyphs::col);
+                }
+            }
+            out << m_glyphs(row + GridGlyphs::right) << '\n';
+            return out;
+        }
+
+        std::basic_ostream<char> &DrawSegmentedSpan(
+            std::basic_ostream<char> &out,
+            std::string_view text
+        ) const {
+            out << m_glyphs(GridGlyphs::row + GridGlyphs::left);
+            if (!text.empty()) {
+                out << text.front();
+                for (std::string_view::size_type i = 1; i < text.size(); ++i) {
+                    out << m_glyphs(GridGlyphs::row + GridGlyphs::colsep) << text[i];
+                }
+            }
+            out << m_glyphs(GridGlyphs::row + GridGlyphs::right) << '\n';
+            return out;
+        }
+
 
     private:
         const GridGlyphs &m_glyphs;
@@ -78,6 +101,6 @@ class BasicBox {
 int main() {
     EnableVirtualTerminal terminal;
     BasicBox box(UnicodeGridGlyphs);
-    box.Draw(std::cout, "Hello, World!");
+    box.DrawArray(std::cout, "The TXT Project");
     return 0;
 }
