@@ -1,7 +1,10 @@
 #include "enablevirtualterminal.h"
 
+#include <algorithm>
 #include <iostream>
+#include <string>
 #include <string_view>
+#include <vector>
 
 struct GridGlyphs {
     // The glyphs are a 5x5 array that hold the characters necessary to
@@ -51,56 +54,122 @@ class BasicBox {
         explicit BasicBox(const GridGlyphs &glyphs = ASCIIGridGlyphs) : m_glyphs(glyphs) {}
         virtual ~BasicBox() = default;
 
-        std::basic_ostream<char> &DrawArray(
-            std::basic_ostream<char> &out,
-            std::string_view text
-        ) const {
-            DrawSegmentedSpan(out, GridGlyphs::top, text.size());
-            DrawSegmentedSpan(out, text);
-            DrawSegmentedSpan(out, GridGlyphs::bottom, text.size());
-            return out;
-        }
-
-        std::basic_ostream<char> &DrawSegmentedSpan(
-            std::basic_ostream<char> &out,
-            int row,
-            std::size_t length
-        ) const {
-            out << m_glyphs(row + GridGlyphs::left);
-            if (length-- > 0) {
-                out << m_glyphs(row + GridGlyphs::col);
-                while (length-- > 0) {
-                    out << m_glyphs(row + GridGlyphs::colsep)
-                        << m_glyphs(row + GridGlyphs::col);
-                }
-            }
-            out << m_glyphs(row + GridGlyphs::right) << '\n';
-            return out;
-        }
-
-        std::basic_ostream<char> &DrawSegmentedSpan(
-            std::basic_ostream<char> &out,
-            std::string_view text
-        ) const {
-            out << m_glyphs(GridGlyphs::row + GridGlyphs::left);
-            if (!text.empty()) {
-                out << text.front();
-                for (std::string_view::size_type i = 1; i < text.size(); ++i) {
-                    out << m_glyphs(GridGlyphs::row + GridGlyphs::colsep) << text[i];
-                }
-            }
-            out << m_glyphs(GridGlyphs::row + GridGlyphs::right) << '\n';
-            return out;
-        }
-
+    protected:
+        std::string_view Glyph(int index) const { return m_glyphs(index); }
 
     private:
         const GridGlyphs &m_glyphs;
 };
 
+class Array : public BasicBox {
+    public:
+        explicit Array(const GridGlyphs &glyphs = ASCIIGridGlyphs) :
+            BasicBox(glyphs) {}
+        Array(std::string_view text, const GridGlyphs &glyphs = ASCIIGridGlyphs) :
+            BasicBox(glyphs)
+        {
+            SetElements(text);
+        }
+        ~Array() override = default;
+
+        std::basic_ostream<char> &Draw(
+            std::basic_ostream<char> &out
+        ) const {
+            DrawSegmentedSpan(out, GridGlyphs::top);
+            DrawElements(out);
+            DrawSegmentedSpan(out, GridGlyphs::bottom);
+            return out;
+        }
+
+        std::basic_ostream<char> &DrawSegmentedSpan(
+            std::basic_ostream<char> &out,
+            int row
+        ) const {
+            out << Glyph(row + GridGlyphs::left);
+            if (auto length = m_elements.size(); length-- > 0) {
+                DrawN(out, Glyph(row + GridGlyphs::col), m_cell_width);
+                while (length-- > 0) {
+                    out << Glyph(row + GridGlyphs::colsep);
+                    DrawN(out, Glyph(row + GridGlyphs::col), m_cell_width);
+                }
+            }
+            out << Glyph(row + GridGlyphs::right) << '\n';
+            return out;
+        }
+
+        std::basic_ostream<char> &DrawElements(
+            std::basic_ostream<char> &out
+        ) const {
+            out << Glyph(GridGlyphs::row + GridGlyphs::left);
+            if (!m_elements.empty()) {
+                out << m_elements.front();
+                for (std::size_t i = 1; i < m_elements.size(); ++i) {
+                    out << Glyph(GridGlyphs::row + GridGlyphs::colsep)
+                        << m_elements[i];
+                }
+            }
+            out << Glyph(GridGlyphs::row + GridGlyphs::right) << '\n';
+            return out;
+        }
+
+        static std::basic_ostream<char> &DrawN(
+            std::basic_ostream<char> &out,
+            std::string_view text, int n
+        ) {
+            while (n-- > 0) { out << text; }
+            return out;
+        }
+
+        void SetElements(std::string_view text) {
+            m_elements.clear();
+            for (const auto ch : text) {
+                m_elements.emplace_back(1, ch);
+            }
+            m_elements.push_back("NUL");
+            m_cell_width = std::max(1, WidthOfWidestElement());
+            PadElements(m_cell_width);
+        }
+
+        int WidthOfWidestElement() const {
+            int widest = 0;
+            for (const auto &e : m_elements) {
+                widest = std::max(widest, MeasureWidth(e));
+            }
+            return widest;
+        }
+
+        void PadElements(int width) {
+            const auto &pad = Glyph(GridGlyphs::row + GridGlyphs::col);
+            for (auto &e : m_elements) {
+                const int excess = width - MeasureWidth(e);
+                if (excess > 0) {
+                    auto left = (excess + 1) / 2;
+                    auto right = excess - left;
+                    std::string padded;
+                    while (left-- > 0) padded += pad;
+                    padded += e;
+                    while (right-- > 0) padded += pad;
+                    using std::swap;
+                    swap(e, padded);
+                }
+            }
+        }
+
+    private:
+        static int MeasureWidth(std::string_view text) {
+            // TODO:  Handle multiple UTF-8 code units.
+            // TODO:  Handle terminal escape sequences.
+            // TODO:  Handle non-spacing Unicode characters.
+            return static_cast<int>(text.size());
+        }
+
+        std::vector<std::string> m_elements;
+        int m_cell_width = 1;
+};
+
 int main() {
     EnableVirtualTerminal terminal;
-    BasicBox box(UnicodeGridGlyphs);
-    box.DrawArray(std::cout, "The TXT Project");
+    Array title("The TXT Project", UnicodeGridGlyphs);
+    title.Draw(std::cout);
     return 0;
 }
